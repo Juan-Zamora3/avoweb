@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "245127140203",
+    "project_id": "avocato-ac114",
+    "storage_bucket": "avocato-ac114.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:245127140203:android:d7ce947136440ebd57f22e",
+        "android_client_info": {
+          "package_name": "com.avocatoo.avocatoapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB4w_VaLM3fAs0VA5g1cGwn_VCMf81mq40"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

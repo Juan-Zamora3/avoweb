@@ -1,0 +1,42 @@
+name: avocatooapp
+description: "A Flutter project for the Avocato restaurant app."
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.6.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  flutter_svg: ^2.0.0
+  shared_preferences: ^2.0.15
+  flutter_speed_dial: ^7.0.0
+  fl_chart: ^0.70.0 # Actualizado a una versión más reciente
+
+  provider: ^6.0.5
+  google_fonts: ^6.2.1
+  cloud_firestore: ^5.6.0
+  firebase_auth: ^5.3.4
+  firebase_core: ^3.9.0
+  fluttertoast: ^8.2.1
+  image_picker: ^1.1.2
+  intl: ^0.19.0
+  flutter_localizations:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/avocato_background.jpg
+    - assets/images/avocato_logo.png
+    - assets/images/fondopantalla.png
+    - assets/images/avatar.png
