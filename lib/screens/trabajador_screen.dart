@@ -507,6 +507,7 @@ class _CrearTrabajadorDialogState extends State<CrearTrabajadorDialog> {
           'nombre': nombreController.text.trim(),
           'correo': correoController.text.trim(),
           'telefono': telefonoController.text.trim(),
+          'contrasena': contrasenaController.text.trim(),
           'puntos': 0,
         });
 
@@ -1692,4 +1693,5 @@ class _AsignarPuntosDialogState extends State<AsignarPuntosDialog> {
       ),
     );
   }
+
 }
