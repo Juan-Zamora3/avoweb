@@ -1,44 +1,73 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_fonts/google_fonts.dart';
 
-class CanjeUsuarioScreen extends StatelessWidget {
+class CanjeUsuarioScreen extends StatefulWidget {
   final String trabajadorId;
 
   const CanjeUsuarioScreen({Key? key, required this.trabajadorId})
       : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
-    // Obtener el tamaño de la pantalla para ajustar el diseño si es necesario
-    final Size screenSize = MediaQuery.of(context).size;
+  State<CanjeUsuarioScreen> createState() => _CanjeUsuarioScreenState();
+}
 
+class _CanjeUsuarioScreenState extends State<CanjeUsuarioScreen> {
+  String nombreUsuario = 'Usuario';
+  String? fotoPerfil; // Base64
+  bool isLoadingUser = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  /// Carga el nombre y la foto de perfil del trabajador
+  Future<void> _loadUserData() async {
+    setState(() => isLoadingUser = true);
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('trabajadores')
+          .doc(widget.trabajadorId)
+          .get();
+      if (doc.exists) {
+        final data = doc.data()!;
+        setState(() {
+          nombreUsuario = data['nombre'] ?? 'Usuario';
+          fotoPerfil = data['fotoPerfil'] as String?;
+        });
+      }
+    } catch (e) {
+      print("Error al cargar datos del trabajador: $e");
+    } finally {
+      setState(() => isLoadingUser = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
-      // Fondo negro para las áreas transparentes de la imagen
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.black, // Fondo negro detrás
       body: SafeArea(
         child: Stack(
           children: [
-            // Imagen de fondo que abarca toda la pantalla
+            // Imagen de fondo
             Container(
               width: double.infinity,
               height: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.black, // Fondo negro para áreas transparentes
-                image: const DecorationImage(
+              decoration: const BoxDecoration(
+                color: Colors.black,
+                image: DecorationImage(
                   image: AssetImage('assets/images/fondopantalla.png'),
                   fit: BoxFit.cover,
                 ),
               ),
             ),
-            // Contenido principal en Column
             Column(
               children: [
-                // Cabecera con saludo y título
                 _buildHeader(),
-                // Espaciador para separar la cabecera del panel blanco
-                const SizedBox(height: 0),
-                // Panel blanco con bordes redondeados
                 Expanded(
                   child: Container(
                     width: double.infinity,
@@ -60,10 +89,10 @@ class CanjeUsuarioScreen extends StatelessWidget {
     );
   }
 
-  /// Construye la cabecera con la imagen de fondo y el saludo.
+  /// Cabecera con "Canje de puntos" y "Hola, <nombre>"
   Widget _buildHeader() {
     return Container(
-      height: 220, // Asegúrate de que este tamaño sea consistente con el diseño
+      height: 220,
       width: double.infinity,
       decoration: const BoxDecoration(
         color: Colors.black,
@@ -72,129 +101,101 @@ class CanjeUsuarioScreen extends StatelessWidget {
           fit: BoxFit.cover,
         ),
         borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(25), // Bordes redondeados inferiores
+          bottomLeft: Radius.circular(25),
           bottomRight: Radius.circular(25),
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0), // Espaciado lateral
-        child: StreamBuilder<DocumentSnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('trabajadores')
-              .doc(trabajadorId)
-              .snapshots(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              );
-            }
-
-            if (!snapshot.hasData || !snapshot.data!.exists) {
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+        child: isLoadingUser
+            ? const Center(child: CircularProgressIndicator(color: Colors.white))
+            : Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _buildUserAvatar(fotoPerfil),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Ícono a la izquierda
-                  const CircleAvatar(
-                    radius: 30,
-                    backgroundColor: Colors.amber, // Color del ícono
-                    child: Icon(
-                      Icons.person,
-                      color: Colors.white,
-                      size: 30,
-                    ),
-                  ),
-                  const SizedBox(width: 12), // Espacio entre ícono y texto
                   Text(
-                    'Hola, Trabajador!',
+                    'Canje de puntos',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.sen(
                       color: Colors.white,
-                      fontSize: 20,
+                      fontSize: 26,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                ],
-              );
-            }
-
-            final data = snapshot.data!.data() as Map<String, dynamic>? ?? {};
-            final String nombreTrabajador = data['nombre'] ?? 'Trabajador';
-
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Ícono a la izquierda
-                const CircleAvatar(
-                  radius: 30,
-                  backgroundColor: Colors.amber, // Color del ícono
-                  child: Icon(
-                    Icons.person,
-                    color: Colors.white,
-                    size: 30,
+                  const SizedBox(height: 8),
+                  Text(
+                    'Hola, $nombreUsuario!',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.sen(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12), // Espacio entre ícono y texto
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start, // Alinea el texto a la izquierda
-                  children: [
-                    Text(
-                      'Canje de puntos',
-                      style: GoogleFonts.sen(
-                        color: Colors.white,
-                        fontSize: 26,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Hola, $nombreTrabajador!',
-                      style: GoogleFonts.sen(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            );
-          },
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
+  /// Avatar base64
+  Widget _buildUserAvatar(String? base64Str) {
+    if (base64Str == null || base64Str.isEmpty) {
+      return const CircleAvatar(
+        radius: 30,
+        backgroundColor: Colors.amber,
+        child: Icon(Icons.person, color: Colors.white, size: 30),
+      );
+    }
+    try {
+      final bytes = base64Decode(base64Str);
+      return CircleAvatar(
+        radius: 30,
+        backgroundImage: MemoryImage(bytes),
+      );
+    } catch (_) {
+      return const CircleAvatar(
+        radius: 30,
+        backgroundColor: Colors.amber,
+        child: Icon(Icons.person, color: Colors.white, size: 30),
+      );
+    }
+  }
 
-  /// Construye el contenido del panel blanco.
+  /// Contenido principal (puntos, lista de incentivos)
   Widget _buildPanelContent(BuildContext context) {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance
           .collection('trabajadores')
-          .doc(trabajadorId)
+          .doc(widget.trabajadorId)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-
         if (!snapshot.hasData || !snapshot.data!.exists) {
           return const Center(
-              child: Text('No se encontraron datos del trabajador.'));
+            child: Text('No se encontraron datos del trabajador.'),
+          );
         }
 
         final data = snapshot.data!.data() as Map<String, dynamic>? ?? {};
-
         return Column(
           children: [
-            // Sección de puntos y botón en la misma fila
             _buildRowPuntosYBoton(context, data),
-            // Título encima de la lista de incentivos
             Padding(
-              padding: const EdgeInsets.only(
-                  left: 16, right: 16, top: 16, bottom: 8),
+              padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 8),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
@@ -207,7 +208,6 @@ class CanjeUsuarioScreen extends StatelessWidget {
                 ),
               ),
             ),
-            // Lista de incentivos
             Expanded(child: _buildIncentivosList(context)),
           ],
         );
@@ -215,12 +215,9 @@ class CanjeUsuarioScreen extends StatelessWidget {
     );
   }
 
-  /// Construye la fila donde se ve:
-  /// [Puntos disponibles (tarjeta)] ---- [Botón Canjear Puntos]
-  Widget _buildRowPuntosYBoton(
-      BuildContext context, Map<String, dynamic> trabajadorData) {
-    final int puntos =
-    trabajadorData['puntos'] is int ? trabajadorData['puntos'] : 0;
+  /// Tarjeta de puntos + botón
+  Widget _buildRowPuntosYBoton(BuildContext context, Map<String, dynamic> data) {
+    final int puntos = data['puntos'] is int ? data['puntos'] : 0;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -234,16 +231,12 @@ class CanjeUsuarioScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Padding(
-                padding:
-                const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
                 child: Column(
                   children: [
                     Text(
                       'Puntos disponibles:',
-                      style: GoogleFonts.sen(
-                        fontSize: 18,
-                        color: Colors.black54,
-                      ),
+                      style: GoogleFonts.sen(fontSize: 18, color: Colors.black54),
                     ),
                     const SizedBox(height: 6),
                     Text(
@@ -251,7 +244,7 @@ class CanjeUsuarioScreen extends StatelessWidget {
                       style: GoogleFonts.sen(
                         fontSize: 32,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF4A90E2),
+                        color: const Color(0xFF4A90E2),
                       ),
                     ),
                   ],
@@ -259,15 +252,11 @@ class CanjeUsuarioScreen extends StatelessWidget {
               ),
             ),
           ),
-
           const SizedBox(width: 16),
-
-          // Botón "Canjear Puntos"
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF4CAF50),
-              padding:
-              const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
@@ -276,10 +265,7 @@ class CanjeUsuarioScreen extends StatelessWidget {
             onPressed: () => _showCanjeDialog(context, puntos),
             child: Text(
               'Canjear Puntos',
-              style: GoogleFonts.sen(
-                fontSize: 18,
-                color: Colors.white,
-              ),
+              style: GoogleFonts.sen(fontSize: 18, color: Colors.white),
             ),
           ),
         ],
@@ -287,17 +273,14 @@ class CanjeUsuarioScreen extends StatelessWidget {
     );
   }
 
-  // Lista de incentivos
+  /// Lista de incentivos
   Widget _buildIncentivosList(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('incentivos').snapshots(),
       builder: (context, snapshot) {
-        // Mientras carga
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-
-        // Si no hay datos o la lista está vacía
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const Center(
             child: Text(
@@ -308,15 +291,12 @@ class CanjeUsuarioScreen extends StatelessWidget {
         }
 
         final incentivos = snapshot.data!.docs;
-
         return ListView.builder(
           itemCount: incentivos.length,
           padding: const EdgeInsets.symmetric(vertical: 8),
           itemBuilder: (context, index) {
             final incentivo = incentivos[index];
-            final incentivoData =
-                incentivo.data() as Map<String, dynamic>? ?? {};
-
+            final incentivoData = incentivo.data() as Map<String, dynamic>? ?? {};
             final String nombre = incentivoData['nombre'] ?? 'Incentivo';
             final String descripcion =
                 incentivoData['descripcion'] ?? 'Sin descripción';
@@ -325,8 +305,7 @@ class CanjeUsuarioScreen extends StatelessWidget {
                 : 0;
 
             return Card(
-              margin:
-              const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
+              margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
@@ -339,25 +318,15 @@ class CanjeUsuarioScreen extends StatelessWidget {
                     color: Colors.amber[700]?.withOpacity(0.2),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    Icons.card_giftcard,
-                    color: Colors.amber[700],
-                    size: 24,
-                  ),
+                  child: Icon(Icons.card_giftcard, color: Colors.amber[700], size: 24),
                 ),
                 title: Text(
                   nombre,
-                  style: GoogleFonts.sen(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+                  style: GoogleFonts.sen(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 subtitle: Text(
                   descripcion,
-                  style: GoogleFonts.sen(
-                    color: Colors.black54,
-                    fontSize: 14,
-                  ),
+                  style: GoogleFonts.sen(color: Colors.black54, fontSize: 14),
                 ),
                 trailing: Text(
                   '$cantidad pts',
@@ -375,7 +344,7 @@ class CanjeUsuarioScreen extends StatelessWidget {
     );
   }
 
-  // Diálogo para canjear puntos (puntos disponibles recibido como argumento)
+  /// Diálogo para canjear puntos
   void _showCanjeDialog(BuildContext context, int puntosDisponibles) {
     final TextEditingController puntosController = TextEditingController();
 
@@ -383,9 +352,7 @@ class CanjeUsuarioScreen extends StatelessWidget {
       context: context,
       builder: (BuildContext ctx) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           title: Text(
             'Canjear Puntos',
             style: GoogleFonts.sen(fontWeight: FontWeight.bold),
@@ -393,15 +360,10 @@ class CanjeUsuarioScreen extends StatelessWidget {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                '1 punto = 1 peso',
-                style: GoogleFonts.sen(color: Colors.black54),
-              ),
+              Text('1 punto = 1 peso', style: GoogleFonts.sen(color: Colors.black54)),
               const SizedBox(height: 10),
-              Text(
-                'Puntos disponibles: $puntosDisponibles',
-                style: GoogleFonts.sen(fontWeight: FontWeight.bold),
-              ),
+              Text('Puntos disponibles: $puntosDisponibles',
+                  style: GoogleFonts.sen(fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
               TextField(
                 controller: puntosController,
@@ -410,8 +372,7 @@ class CanjeUsuarioScreen extends StatelessWidget {
                   labelText: 'Puntos a canjear',
                   labelStyle: GoogleFonts.sen(),
                   border: const OutlineInputBorder(),
-                  contentPadding:
-                  const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                 ),
               ),
             ],
@@ -420,80 +381,59 @@ class CanjeUsuarioScreen extends StatelessWidget {
             TextButton(
               style: TextButton.styleFrom(foregroundColor: Colors.red),
               onPressed: () => Navigator.of(ctx).pop(),
-              child: Text(
-                'Cancelar',
-                style: GoogleFonts.sen(),
-              ),
+              child: Text('Cancelar', style: GoogleFonts.sen()),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFF9800),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
               onPressed: () async {
-                final int puntosACanjear =
-                    int.tryParse(puntosController.text) ?? 0;
-
-                if (puntosACanjear <= 0 ||
-                    puntosACanjear > puntosDisponibles) {
+                final int puntosACanjear = int.tryParse(puntosController.text) ?? 0;
+                if (puntosACanjear <= 0 || puntosACanjear > puntosDisponibles) {
                   Navigator.of(ctx).pop();
-                  _showErrorDialog(
-                    context,
-                    'Cantidad inválida de puntos o excede los disponibles.',
-                  );
+                  _showErrorDialog(context, 'Cantidad inválida o excede los disponibles.');
                   return;
                 }
-
                 try {
                   // Obtener el nombre REAL del trabajador
                   final trabajadorSnap = await FirebaseFirestore.instance
                       .collection('trabajadores')
-                      .doc(trabajadorId)
+                      .doc(widget.trabajadorId)
                       .get();
-                  final Map<String, dynamic>? trabajadorData =
-                  trabajadorSnap.data();
-
+                  final trabajadorData = trabajadorSnap.data() ?? {};
                   final String nombreTrabajador =
-                      trabajadorData?['nombre'] ?? 'Sin nombre';
+                      trabajadorData['nombre'] ?? 'Sin nombre';
 
-                  // (1) Actualizamos los puntos del trabajador
+                  // (1) Actualizar puntos
                   await FirebaseFirestore.instance
                       .collection('trabajadores')
-                      .doc(trabajadorId)
+                      .doc(widget.trabajadorId)
                       .update({
                     'puntos': puntosDisponibles - puntosACanjear,
                   });
 
-                  // (2) Guardamos el canje en el historial
+                  // (2) Guardar en historial
                   await FirebaseFirestore.instance
                       .collection('historial_puntos')
                       .add({
-                    'trabajadorId': trabajadorId,
-                    // Guardamos el nombre real
+                    'trabajadorId': widget.trabajadorId,
                     'nombreTrabajador': nombreTrabajador,
                     'nombreIncentivo': 'Descripción canje',
                     'descripcion': 'Canje de puntos',
                     'cantidad': puntosACanjear,
                     'fecha': DateTime.now(),
-                    'tipo': 'canjeado', // Indica que es un canje
+                    'tipo': 'canjeado',
                   });
 
                   Navigator.of(ctx).pop();
                   _showSuccessDialog(context, 'Canje realizado con éxito.');
                 } catch (e) {
                   Navigator.of(ctx).pop();
-                  _showErrorDialog(
-                    context,
-                    'Ocurrió un error al realizar el canje. Por favor, intenta nuevamente.',
-                  );
+                  _showErrorDialog(context, 'Ocurrió un error al realizar el canje.');
                 }
               },
-              child: Text(
-                'Canjear',
-                style: GoogleFonts.sen(fontWeight: FontWeight.bold),
-              ),
+              child: Text('Canjear', style: GoogleFonts.sen(fontWeight: FontWeight.bold)),
             ),
           ],
         );
@@ -501,28 +441,21 @@ class CanjeUsuarioScreen extends StatelessWidget {
     );
   }
 
-  // Diálogo de error personalizado
+  /// Diálogo de error
   void _showErrorDialog(BuildContext context, String mensaje) {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
         return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           child: Container(
             padding: const EdgeInsets.all(20),
-            width: 300,
             color: const Color(0xFFFFE5E5),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.error_outline,
-                  color: Colors.redAccent,
-                  size: 48,
-                ),
+                const Icon(Icons.error_outline, color: Colors.redAccent, size: 48),
                 const SizedBox(height: 12),
                 Text(
                   'Error',
@@ -536,26 +469,13 @@ class CanjeUsuarioScreen extends StatelessWidget {
                 Text(
                   mensaje,
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.sen(
-                    color: Colors.black87,
-                    fontSize: 16,
-                  ),
+                  style: GoogleFonts.sen(color: Colors.black87, fontSize: 16),
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                  child: Text(
-                    'Cerrar',
-                    style: GoogleFonts.sen(color: Colors.white),
-                  ),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text('Cerrar', style: GoogleFonts.sen(color: Colors.white)),
                 ),
               ],
             ),
@@ -565,28 +485,21 @@ class CanjeUsuarioScreen extends StatelessWidget {
     );
   }
 
-  // Diálogo de éxito personalizado
+  /// Diálogo de éxito
   void _showSuccessDialog(BuildContext context, String mensaje) {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
         return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           child: Container(
             padding: const EdgeInsets.all(20),
-            width: 300,
             color: const Color(0xFFE4F7E4),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.check_circle_outline,
-                  color: Colors.green,
-                  size: 48,
-                ),
+                const Icon(Icons.check_circle_outline, color: Colors.green, size: 48),
                 const SizedBox(height: 12),
                 Text(
                   '¡Éxito!',
@@ -600,26 +513,13 @@ class CanjeUsuarioScreen extends StatelessWidget {
                 Text(
                   mensaje,
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.sen(
-                    color: Colors.black87,
-                    fontSize: 16,
-                  ),
+                  style: GoogleFonts.sen(color: Colors.black87, fontSize: 16),
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                  child: Text(
-                    'Cerrar',
-                    style: GoogleFonts.sen(color: Colors.white),
-                  ),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text('Cerrar', style: GoogleFonts.sen(color: Colors.white)),
                 ),
               ],
             ),

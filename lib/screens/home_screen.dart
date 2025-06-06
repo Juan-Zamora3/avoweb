@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
+import 'dart:convert'; // <-- Necesario para base64Decode
+
 import 'trabajador_screen.dart';
 import 'historialcanje_screen.dart';
 import 'ajustes_admin.dart';
 import 'muro_screen.dart';
 import 'catalogo_screen.dart';
-import 'package:intl/intl.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -144,8 +146,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// Función para extraer la cantidad o precio según el tipo:
   /// - Si el documento es de tipo "canjeado" (puntos), se verifica el campo "precio".
   /// - Si es de tipo "canje_producto" (producto), se verifica el campo "cantidad".
-  /// Si alguno no existe (o es 0), se intenta el otro; si ambos existen y son > 0,
-  /// se da preferencia según el tipo o se puede sumar (aquí se opta por la preferencia).
   int extractCantidad(Map<String, dynamic> data) {
     String tipo = data['tipo'] ?? '';
     int valorPrecio = 0;
@@ -188,6 +188,62 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return 'Agregado';
     }
     return 'Desconocido';
+  }
+
+  /// Construye un CircleAvatar en base al nombre del trabajador,
+  /// consultando la colección `trabajadores` para obtener la cadena Base64.
+  Widget _buildCircleAvatarForUser(String nombreTrabajador) {
+    // Si no tienes un nombre válido, usa un avatar por defecto
+    if (nombreTrabajador.isEmpty || nombreTrabajador == 'Desconocido') {
+      return const CircleAvatar(
+        backgroundImage: AssetImage('assets/images/avatar.png'),
+      );
+    }
+
+    return FutureBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      future: FirebaseFirestore.instance
+          .collection('trabajadores')
+          .where('nombre', isEqualTo: nombreTrabajador)
+          .limit(1)
+          .get(),
+      builder: (context, snapshot) {
+        // Mientras carga
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const CircleAvatar(
+            backgroundImage: AssetImage('assets/images/avatar.png'),
+          );
+        }
+        // Si no hay datos o hay error
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const CircleAvatar(
+            backgroundImage: AssetImage('assets/images/avatar.png'),
+          );
+        }
+
+        final doc = snapshot.data!.docs.first.data();
+        final fotoBase64 = doc['fotoPerfil'] ?? '';
+
+        if (fotoBase64 is String && fotoBase64.isNotEmpty) {
+          try {
+            // Decodifica la cadena Base64 a bytes
+            final bytes = base64Decode(fotoBase64);
+            return CircleAvatar(
+              backgroundImage: MemoryImage(bytes),
+            );
+          } catch (e) {
+            // Si falla la decodificación, muestra avatar por defecto
+            return const CircleAvatar(
+              backgroundImage: AssetImage('assets/images/avatar.png'),
+            );
+          }
+        } else {
+          // Si no hay campo o está vacío, usa avatar por defecto
+          return const CircleAvatar(
+            backgroundImage: AssetImage('assets/images/avatar.png'),
+          );
+        }
+      },
+    );
   }
 
   @override
@@ -351,6 +407,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             Stack(
               children: [
+                // Aquí puedes cambiarlo si quieres mostrar la foto del admin en base64
                 const CircleAvatar(
                   radius: 40,
                   backgroundImage: AssetImage('assets/images/avatar.png'),
@@ -360,7 +417,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   right: 0,
                   child: Container(
                     padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       color: Colors.amber,
                       shape: BoxShape.circle,
                     ),
@@ -490,7 +547,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       String topUserName,
       int topUserPoints,
       List<FlSpot> lastFivePoints,
-      DateTime? firstDate) {
+      DateTime? firstDate,
+      ) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Container(
@@ -574,8 +632,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }).toList();
 
-    final maxYValue =
-    lastFivePoints.map((e) => e.y).reduce((a, b) => a > b ? a : b);
+    final maxYValue = lastFivePoints.map((e) => e.y).reduce((a, b) => a > b ? a : b);
 
     return SizedBox(
       height: 120,
@@ -591,8 +648,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 showTitles: true,
                 interval: 1,
                 getTitlesWidget: (double value, TitleMeta meta) {
-                  DateTime date =
-                  firstDate.add(Duration(days: value.toInt()));
+                  DateTime date = firstDate.add(Duration(days: value.toInt()));
                   String formattedDate = "${date.day}/${date.month}";
                   return Text(
                     formattedDate,
@@ -707,8 +763,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 10),
             Column(
               children: sortedRanking.take(5).map((entry) {
+                // entry.key -> nombreTrabajador
+                // entry.value -> puntos
                 return ListTile(
-                  leading: const Icon(Icons.emoji_events, color: Colors.amber),
+                  // En lugar del ícono, usamos la foto Base64
+                  leading: _buildCircleAvatarForUser(entry.key),
                   title: Text(
                     entry.key,
                     style: GoogleFonts.sen(
@@ -735,7 +794,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// Listado de datos (se muestra el tipo de canje para cada registro)
   Widget _buildDataList(
       List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-      DateTime? firstDate) {
+      DateTime? firstDate,
+      ) {
     if (docs.isEmpty || firstDate == null) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -793,9 +853,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: ListTile(
-                leading: Icon(Icons.check_circle, color: Colors.amber[700]),
+                // Aquí usamos la foto del trabajador en Base64
+                leading: _buildCircleAvatarForUser(nombre),
                 title: Text(
-                  "$nombre",
+                  nombre,
                   style: GoogleFonts.sen(
                     fontWeight: FontWeight.bold,
                     color: Colors.black87,

@@ -1,14 +1,17 @@
-
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'canjeusuario_screen.dart'; // Asegúrate de que la ruta sea correcta
-import 'historialcanje_screen.dart'; // Asegúrate de que la ruta sea correcta
-import 'ajustes_user.dart'; // Asegúrate de que la ruta sea correcta
-import 'murousuario_screen.dart'; // Importa la nueva pantalla
+
+import 'canjeusuario_screen.dart';
+import 'historialcanje_screen.dart';
+import 'ajustes_user.dart';
+import 'murousuario_screen.dart';
 import 'catalogouser_screen.dart';
+
 class HomeScreenUser extends StatefulWidget {
   const HomeScreenUser({Key? key}) : super(key: key);
 
@@ -18,64 +21,65 @@ class HomeScreenUser extends StatefulWidget {
 
 class _HomeScreenUserState extends State<HomeScreenUser> {
   String uid = '';
-  String nombreUsuario = 'Usuario'; // Variable para almacenar el nombre del usuario
+  String nombreUsuario = 'Usuario';
+  String? fotoPerfil; // Guardar la foto de perfil base64
   int userPoints = 0;
-  int nextGoal = 1000; // Meta siguiente
-  bool isLoadingUser = true; // Estado de carga para los datos del usuario
-  bool isLoadingTopWorkers = true; // Estado de carga para los trabajadores top
+  int nextGoal = 1000;
+  bool isLoadingUser = true;
+  bool isLoadingTopWorkers = true;
 
   List<Map<String, dynamic>> topWorkers = [];
+  List<String> imageBase64List = [];
 
-  int _selectedIndex = 0; // Índice actual de la barra de navegación inferior
+  int _selectedIndex = 0;
 
-  // Definición de la paleta de colores
-  final Color primaryColor = const Color(0xFFD1D92C); // #D1D92C
-  final Color secondaryColor = const Color(0xFFFCC039); // #FCC039
+  final Color primaryColor = const Color(0xFFD1D92C);
+  final Color secondaryColor = const Color(0xFFFCC039);
   final Color blackColor = Colors.black;
+
+  // PageView controller para el carrusel
+  late PageController _pageController;
+  Timer? _carouselTimer;
 
   @override
   void initState() {
     super.initState();
-    _loadTrabajadorId(); // Llama a la función para cargar el trabajadorId
+    _pageController = PageController(initialPage: 0);
+    _loadTrabajadorId();
+    _loadImages();
   }
 
-  /// Función para cargar el trabajadorId desde SharedPreferences
-  Future<void> _loadTrabajadorId() async {
-    setState(() {
-      isLoadingUser = true;
-    });
+  @override
+  void dispose() {
+    _carouselTimer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
 
+  /// Carga el trabajadorId y llama a los demás métodos
+  Future<void> _loadTrabajadorId() async {
+    setState(() => isLoadingUser = true);
     try {
       final prefs = await SharedPreferences.getInstance();
-      final id = prefs.getString('trabajadorId'); // Recupera el trabajadorId
-
+      final id = prefs.getString('trabajadorId');
       if (id == null || id.isEmpty) {
-        // Si no hay trabajadorId, redirige al inicio de sesión
         Navigator.pushReplacementNamed(context, '/login');
         return;
       }
+      setState(() => uid = id);
 
-      setState(() {
-        uid = id; // Asigna el trabajadorId a uid
-      });
-
-      await _loadUserData(); // Carga los datos del usuario
-      await _loadTopWorkers(); // Carga el ranking
+      await _loadUserData();
+      await _loadTopWorkers();
     } catch (e) {
       print("Error al cargar el trabajadorId: $e");
     } finally {
-      setState(() {
-        isLoadingUser = false;
-      });
+      setState(() => isLoadingUser = false);
     }
   }
 
-
-  /// Función para cargar los datos del usuario, incluyendo el nombre y puntos
+  /// Carga los datos del usuario (nombre, puntos, fotoPerfil, etc.)
   Future<void> _loadUserData() async {
-    setState(() {
-      isLoadingUser = true;
-    });
+    setState(() => isLoadingUser = true);
     try {
       final docUser = await FirebaseFirestore.instance
           .collection('trabajadores')
@@ -84,58 +88,89 @@ class _HomeScreenUserState extends State<HomeScreenUser> {
       if (docUser.exists) {
         final data = docUser.data()!;
         setState(() {
-          nombreUsuario = data['nombre'] ?? 'Usuario'; // Obtener el nombre del usuario
+          nombreUsuario = data['nombre'] ?? 'Usuario';
           userPoints = data['puntos'] ?? 0;
-          // Calcular meta en tramos de 1000
           nextGoal = ((userPoints ~/ 1000) + 1) * 1000;
+
+          // Foto de perfil (base64)
+          fotoPerfil = data['fotoPerfil'] as String?; // null si no existe
         });
       }
     } catch (e) {
       print("Error al cargar usuario: $e");
     } finally {
-      setState(() {
-        isLoadingUser = false;
-      });
+      setState(() => isLoadingUser = false);
     }
   }
 
-  /// Función para cargar los trabajadores top
+  /// Carga top 3 para el ranking (incluye fotoPerfil)
   Future<void> _loadTopWorkers() async {
-    setState(() {
-      isLoadingTopWorkers = true;
-    });
+    setState(() => isLoadingTopWorkers = true);
     try {
       final snap = await FirebaseFirestore.instance
           .collection('trabajadores')
           .orderBy('puntos', descending: true)
           .limit(3)
           .get();
-
       setState(() {
         topWorkers = snap.docs.map((doc) {
           final d = doc.data();
           return {
             'nombre': d['nombre'] ?? 'N/A',
             'puntos': d['puntos'] ?? 0,
+            'fotoPerfil': d['fotoPerfil'] ?? null, // base64 o null
           };
         }).toList();
       });
     } catch (e) {
       print("Error al cargar ranking: $e");
     } finally {
+      setState(() => isLoadingTopWorkers = false);
+    }
+  }
+
+  /// Carga imágenes base64 del carrusel
+  Future<void> _loadImages() async {
+    try {
+      final imagesSnapshot = await FirebaseFirestore.instance
+          .collection('carrusel')
+          .orderBy('fecha', descending: true)
+          .get();
       setState(() {
-        isLoadingTopWorkers = false;
+        imageBase64List = imagesSnapshot.docs
+            .map((doc) => doc['base64'] as String)
+            .toList();
+      });
+      _startAutoScroll();
+    } catch (e) {
+      print("Error al cargar imágenes: $e");
+    }
+  }
+
+  /// Inicia auto-scroll del carrusel si hay más de una imagen
+  void _startAutoScroll() {
+    _carouselTimer?.cancel();
+    if (imageBase64List.length > 1) {
+      _carouselTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+        if (_pageController.hasClients) {
+          int nextPage = _pageController.page!.round() + 1;
+          if (nextPage >= imageBase64List.length) {
+            nextPage = 0;
+          }
+          _pageController.animateToPage(
+            nextPage,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeIn,
+          );
+        }
       });
     }
   }
 
-  /// Función para manejar la selección de ítems en la barra de navegación inferior
+  /// Maneja la navegación inferior
   void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
+    setState(() => _selectedIndex = index);
     if (index == 0) {
-      // Si se selecciona "Inicio", refrescar los datos
       _loadUserData();
       _loadTopWorkers();
     }
@@ -145,9 +180,9 @@ class _HomeScreenUserState extends State<HomeScreenUser> {
   Widget build(BuildContext context) {
     final List<Widget> _screens = [
       _buildHomeContent(),
-      CanjeUsuarioScreen(trabajadorId: uid), // Asegúrate de que esta clase exista
-      const HistorialCanjeScreen(), // Asegúrate de que esta clase exista
-      const MuroUsuarioScreen(), // Nueva pantalla de Notificaciones
+      CanjeUsuarioScreen(trabajadorId: uid),
+      const HistorialCanjeScreen(),
+      MuroUsuarioScreen(trabajadorId: uid),
       const CatalogoUserScreen(),
       const AjustesUserScreen(),
     ];
@@ -161,14 +196,13 @@ class _HomeScreenUserState extends State<HomeScreenUser> {
     );
   }
 
-  /// Contenido de la pantalla "Inicio"
+  /// Contenido principal (cabecera, tarjeta de puntos, ranking, carrusel)
   Widget _buildHomeContent() {
     return Stack(
       children: [
-        // Fondo de pantalla
+        // Fondo negro con imagen
         Container(
           decoration: const BoxDecoration(
-            color: Colors.black,
             image: DecorationImage(
               image: AssetImage('assets/images/fondopantalla.png'),
               fit: BoxFit.cover,
@@ -177,7 +211,10 @@ class _HomeScreenUserState extends State<HomeScreenUser> {
         ),
         Column(
           children: [
+            // Cabecera
             _buildHeader(),
+
+            // Sección blanca con puntos, ranking y carrusel
             Expanded(
               child: Container(
                 decoration: const BoxDecoration(
@@ -190,8 +227,16 @@ class _HomeScreenUserState extends State<HomeScreenUser> {
                 child: SingleChildScrollView(
                   child: Column(
                     children: [
+                      const SizedBox(height: 20),
                       _buildUserPointsCard(),
                       _buildRankingSection(),
+                      const SizedBox(height: 20),
+                      // Carrusel al final, más pequeño
+                      SizedBox(
+                        height: 150,
+                        child: _buildCarousel(),
+                      ),
+                      const SizedBox(height: 20),
                     ],
                   ),
                 ),
@@ -203,7 +248,7 @@ class _HomeScreenUserState extends State<HomeScreenUser> {
     );
   }
 
-  /// Cabecera con saludo y avatar
+  /// Cabecera con saludo y foto de perfil
   Widget _buildHeader() {
     return Container(
       height: 250,
@@ -211,9 +256,9 @@ class _HomeScreenUserState extends State<HomeScreenUser> {
         color: Colors.black87,
         image: const DecorationImage(
           image: AssetImage('assets/images/fondopantalla.png'),
-          fit: BoxFit.cover, // Ajusta la imagen para cubrir toda el área
+          fit: BoxFit.cover,
           colorFilter: ColorFilter.mode(
-            Colors.black38, // Ajustado para menor opacidad
+            Colors.black38,
             BlendMode.darken,
           ),
         ),
@@ -226,16 +271,13 @@ class _HomeScreenUserState extends State<HomeScreenUser> {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
         child: Row(
           children: [
-            CircleAvatar(
-              radius: 40,
-              backgroundColor: secondaryColor,
-              child: const Icon(Icons.person, color: Colors.white, size: 40),
-            ),
+            // Si fotoPerfil != null, la decodificamos, sino ícono
+            _buildUserAvatar(fotoPerfil),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     "Hola, $nombreUsuario!",
@@ -252,11 +294,10 @@ class _HomeScreenUserState extends State<HomeScreenUser> {
                       const SizedBox(width: 8),
                       GestureDetector(
                         onTap: () {
-                          // Navegar a la pantalla de notificaciones
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => const MuroUsuarioScreen(),
+                              builder: (_) => MuroUsuarioScreen( trabajadorId: uid,),
                             ),
                           );
                         },
@@ -277,6 +318,53 @@ class _HomeScreenUserState extends State<HomeScreenUser> {
           ],
         ),
       ),
+    );
+  }
+
+  /// Construye un avatar a partir de la base64
+  Widget _buildUserAvatar(String? base64Str) {
+    if (base64Str == null || base64Str.isEmpty) {
+      return CircleAvatar(
+        radius: 40,
+        backgroundColor: secondaryColor,
+        child: const Icon(Icons.person, color: Colors.white, size: 40),
+      );
+    }
+    try {
+      final bytes = base64Decode(base64Str);
+      return CircleAvatar(
+        radius: 40,
+        backgroundImage: MemoryImage(bytes),
+      );
+    } catch (_) {
+      return CircleAvatar(
+        radius: 40,
+        backgroundColor: secondaryColor,
+        child: const Icon(Icons.person, color: Colors.white, size: 40),
+      );
+    }
+  }
+
+  /// Carrusel con PageView
+  Widget _buildCarousel() {
+    if (imageBase64List.isEmpty) return const SizedBox();
+
+    return PageView.builder(
+      controller: _pageController,
+      itemCount: imageBase64List.length,
+      itemBuilder: (context, index) {
+        final base64Str = imageBase64List[index];
+        final bytes = base64Decode(base64Str);
+
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 8),
+          child: Image.memory(
+            bytes,
+            fit: BoxFit.cover,
+            width: double.infinity,
+          ),
+        );
+      },
     );
   }
 
@@ -322,17 +410,11 @@ class _HomeScreenUserState extends State<HomeScreenUser> {
               children: [
                 Text(
                   "$userPoints puntos",
-                  style: GoogleFonts.sen(
-                    fontSize: 14,
-                    color: blackColor,
-                  ),
+                  style: GoogleFonts.sen(fontSize: 14, color: blackColor),
                 ),
                 Text(
                   "$nextGoal puntos",
-                  style: GoogleFonts.sen(
-                    fontSize: 14,
-                    color: blackColor,
-                  ),
+                  style: GoogleFonts.sen(fontSize: 14, color: blackColor),
                 ),
               ],
             ),
@@ -358,60 +440,85 @@ class _HomeScreenUserState extends State<HomeScreenUser> {
             ),
           ),
           const SizedBox(height: 10),
-          isLoadingTopWorkers
-              ? const Center(child: CircularProgressIndicator())
-              : Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: List.generate(3, (index) {
-              if (index >= topWorkers.length) {
-                return Column(
-                  children: const [
-                    CircleAvatar(
-                      radius: 30,
-                      backgroundColor: Colors.grey,
-                      child: Icon(Icons.person, color: Colors.white),
-                    ),
-                    SizedBox(height: 5),
-                    Text("N/A"),
-                    Text(
-                      "0 pts",
-                      style: TextStyle(fontSize: 12, color: Colors.black54),
-                    ),
-                  ],
+          if (isLoadingTopWorkers)
+            const Center(child: CircularProgressIndicator())
+          else
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: List.generate(3, (index) {
+                if (index >= topWorkers.length) {
+                  return _buildRankingItem(
+                    nombre: "N/A",
+                    puntos: 0,
+                    fotoPerfil: null,
+                  );
+                }
+                final worker = topWorkers[index];
+                return _buildRankingItem(
+                  nombre: worker['nombre'],
+                  puntos: worker['puntos'],
+                  fotoPerfil: worker['fotoPerfil'],
                 );
-              }
-              final worker = topWorkers[index];
-              return Column(
-                children: [
-                  CircleAvatar(
-                    radius: 30,
-                    backgroundColor: secondaryColor,
-                    child: const Icon(Icons.person, color: Colors.white, size: 30),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    worker['nombre'],
-                    style: GoogleFonts.sen(
-                      color: blackColor,
-                    ),
-                  ),
-                  Text(
-                    "${worker['puntos']} pts",
-                    style: GoogleFonts.sen(
-                      fontSize: 12,
-                      color: Colors.black54,
-                    ),
-                  ),
-                ],
-              );
-            }),
+              }),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Construye un item del ranking (avatar, nombre, puntos)
+  Widget _buildRankingItem({
+    required String nombre,
+    required int puntos,
+    required String? fotoPerfil,
+  }) {
+    return SizedBox(
+      width: 80, // Ajusta para evitar romper layout
+      child: Column(
+        children: [
+          _buildUserAvatarRanking(fotoPerfil),
+          const SizedBox(height: 5),
+          Text(
+            nombre,
+            style: GoogleFonts.sen(color: blackColor, fontSize: 14),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis, // Para nombres largos
+            textAlign: TextAlign.center,
+          ),
+          Text(
+            "$puntos pts",
+            style: GoogleFonts.sen(fontSize: 12, color: Colors.black54),
           ),
         ],
       ),
     );
   }
 
-  /// Barra de navegación inferior con el nuevo ítem de Notificaciones
+  /// Avatar para ranking (más pequeño)
+  Widget _buildUserAvatarRanking(String? base64Str) {
+    if (base64Str == null || base64Str.isEmpty) {
+      return CircleAvatar(
+        radius: 30,
+        backgroundColor: secondaryColor,
+        child: const Icon(Icons.person, color: Colors.white, size: 30),
+      );
+    }
+    try {
+      final bytes = base64Decode(base64Str);
+      return CircleAvatar(
+        radius: 30,
+        backgroundImage: MemoryImage(bytes),
+      );
+    } catch (_) {
+      return CircleAvatar(
+        radius: 30,
+        backgroundColor: secondaryColor,
+        child: const Icon(Icons.person, color: Colors.white, size: 30),
+      );
+    }
+  }
+
+  /// Barra de navegación inferior
   Widget _buildBottomNavigationBar() {
     return BottomNavigationBar(
       backgroundColor: Colors.white,
@@ -419,32 +526,14 @@ class _HomeScreenUserState extends State<HomeScreenUser> {
       unselectedItemColor: Colors.grey,
       currentIndex: _selectedIndex,
       onTap: _onItemTapped,
-      type: BottomNavigationBarType.fixed, // Permite más de 3 ítems
+      type: BottomNavigationBarType.fixed,
       items: const <BottomNavigationBarItem>[
-        BottomNavigationBarItem(
-          icon: Icon(Icons.home),
-          label: 'Inicio',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.card_giftcard),
-          label: 'Canjes',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.history),
-          label: 'Historial',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.notifications),
-          label: 'Notificaciones',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.store), // ✅ NUEVO: Icono de catálogo
-          label: 'Catálogo',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.settings),
-          label: 'Ajustes',
-        ),
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Inicio'),
+        BottomNavigationBarItem(icon: Icon(Icons.card_giftcard), label: 'Canjes'),
+        BottomNavigationBarItem(icon: Icon(Icons.history), label: 'Historial'),
+        BottomNavigationBarItem(icon: Icon(Icons.notifications), label: 'Notificaciones'),
+        BottomNavigationBarItem(icon: Icon(Icons.store), label: 'Catálogo'),
+        BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Ajustes'),
       ],
     );
   }

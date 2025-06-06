@@ -38,9 +38,7 @@ class _CatalogoUserScreenState extends State<CatalogoUserScreen> {
             'id': doc.id,
             'nombre': data['nombre'] ?? 'Producto',
             'descripcion': data['descripcion'] ?? 'Sin descripción',
-            // Aseguramos que sea int
             'precio': ((data['precio'] ?? 0) as num).toInt(),
-
             'imagen': data['imagen'] ?? '',
           };
         }).toList();
@@ -73,7 +71,6 @@ class _CatalogoUserScreenState extends State<CatalogoUserScreen> {
       if (userDoc.exists) {
         setState(() {
           currentPoints = ((userDoc['puntos'] ?? 0) as num).toInt();
-
         });
       } else {
         print("El documento del usuario no existe en Firestore.");
@@ -85,7 +82,6 @@ class _CatalogoUserScreenState extends State<CatalogoUserScreen> {
 
   /// Muestra un AlertDialog para confirmar el canje
   void _confirmCanje(Map<String, dynamic> item) {
-    // Verificamos si el usuario tiene puntos suficientes
     if (currentPoints < (item['precio'] ?? 0).toInt()) {
       _showSnackBar("No tienes suficientes puntos para este canje.");
       return;
@@ -124,7 +120,6 @@ class _CatalogoUserScreenState extends State<CatalogoUserScreen> {
   /// Realiza el canje y actualiza puntos e historial en Firestore
   Future<void> _realizarCanje(Map<String, dynamic> item) async {
     try {
-      // Cargamos nuevamente el trabajadorId de SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       final trabajadorId = prefs.getString('trabajadorId');
 
@@ -133,7 +128,6 @@ class _CatalogoUserScreenState extends State<CatalogoUserScreen> {
         return;
       }
 
-      // Obtenemos el nombre REAL del trabajador
       final trabajadorSnap = await FirebaseFirestore.instance
           .collection('trabajadores')
           .doc(trabajadorId)
@@ -141,16 +135,13 @@ class _CatalogoUserScreenState extends State<CatalogoUserScreen> {
       final trabajadorData = trabajadorSnap.data();
       final String nombreTrabajador = trabajadorData?['nombre'] ?? 'Sin nombre';
 
-      // Calculamos los nuevos puntos
-      final int newPoints = (currentPoints - (item['precio'] ?? 0) as num).toInt();
+      final int newPoints = (currentPoints - (item['precio'] ?? 0)).toInt();
 
-      // Actualizamos los puntos del trabajador
       await FirebaseFirestore.instance
           .collection('trabajadores')
           .doc(trabajadorId)
           .update({'puntos': newPoints});
 
-      // Registramos el canje en el historial
       await FirebaseFirestore.instance.collection('historial_puntos').add({
         'trabajadorId': trabajadorId,
         'nombreTrabajador': nombreTrabajador,
@@ -161,7 +152,6 @@ class _CatalogoUserScreenState extends State<CatalogoUserScreen> {
         'tipo': 'canjeado',
       });
 
-      // Actualizamos los puntos en la UI
       setState(() {
         currentPoints = newPoints;
       });
@@ -209,26 +199,37 @@ class _CatalogoUserScreenState extends State<CatalogoUserScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    // Ajustamos la altura del header según la altura de la pantalla (por ejemplo, 30%)
+    final headerHeight = screenSize.height * 0.3;
+    // Definimos el número de columnas para el GridView según el ancho de la pantalla
+    int crossAxisCount = 4;
+    if (screenSize.width < 600) {
+      crossAxisCount = 2;
+    } else if (screenSize.width < 900) {
+      crossAxisCount = 3;
+    }
+
     return Scaffold(
       backgroundColor: Colors.grey[200],
       body: Column(
         children: [
-          _buildHeader(),
+          _buildHeader(headerHeight),
           Expanded(
             child: isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _buildCatalogList(),
+                : _buildCatalogList(crossAxisCount),
           ),
         ],
       ),
     );
   }
 
-  /// Cabecera con imagen de fondo y puntos disponibles
-  Widget _buildHeader() {
+  /// Cabecera con imagen de fondo y puntos disponibles. Recibe la altura para ser responsiva.
+  Widget _buildHeader(double height) {
     return Container(
       width: double.infinity,
-      height: 250,
+      height: height,
       decoration: BoxDecoration(
         color: Colors.black,
         borderRadius: const BorderRadius.only(
@@ -276,8 +277,8 @@ class _CatalogoUserScreenState extends State<CatalogoUserScreen> {
     );
   }
 
-  /// Construye la lista principal del catálogo
-  Widget _buildCatalogList() {
+  /// Construye la lista principal del catálogo utilizando el número de columnas adecuado.
+  Widget _buildCatalogList(int crossAxisCount) {
     if (catalogoItems.isEmpty) {
       return Center(
         child: Text(
@@ -289,8 +290,8 @@ class _CatalogoUserScreenState extends State<CatalogoUserScreen> {
 
     return GridView.builder(
       padding: const EdgeInsets.all(16),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
         childAspectRatio: 0.75,
